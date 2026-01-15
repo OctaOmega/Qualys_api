@@ -4,22 +4,18 @@ from flask import Flask, render_template, jsonify, request, send_file
 from dotenv import load_dotenv
 import pandas as pd
 import io
+import json
 
-from services.token_manager import TokenManager
+from extensions import db
+from models import QualysAuthToken
+# token_manager is now a module with functions, need to adapt client usage
+from services.token_manager import get_valid_token 
 from services.sync_state import SyncStateManager
 from services.certview_client import CertViewClient
 from services.sync_runner import SyncRunner
 
 # Load Env
 load_dotenv()
-
-# Config
-QUALYS_BASE_URL = os.getenv('QUALYS_BASE_URL', 'https://gateway.qg1.apps.qualys.com')
-QUALYS_LIST_ENDPOINT = os.getenv('QUALYS_CERTVIEW_LIST_ENDPOINT', '/certview/v2/certificates/list')
-AUTH_ENDPOINT = os.getenv('QUALYS_INTERNAL_AUTH_ENDPOINT', '/auth/token')
-AUTH_PAYLOAD = os.getenv('QUALYS_INTERNAL_AUTH_PAYLOAD', '{}')
-PAGE_SIZE = int(os.getenv('PAGE_SIZE', 50))
-TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', 30))
 
 # Logging Setup
 logging.basicConfig(level=logging.INFO, 
@@ -28,30 +24,76 @@ logger = logging.getLogger('app')
 
 app = Flask(__name__)
 
+# Config
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Mapping Env to Config expected by TokenManager
+QUALYS_BASE_URL = os.getenv('QUALYS_BASE_URL', 'https://gateway.qg1.apps.qualys.com')
+QUALYS_LIST_ENDPOINT = os.getenv('QUALYS_CERTVIEW_LIST_ENDPOINT', '/certview/v2/certificates/list')
+AUTH_ENDPOINT = os.getenv('QUALYS_INTERNAL_AUTH_ENDPOINT', '/auth/token')
+AUTH_PAYLOAD_STR = os.getenv('QUALYS_INTERNAL_AUTH_PAYLOAD', '{"username": "", "password": ""}')
+
+# Parse payload to get user/pass for config
+try:
+    auth_payload = json.loads(AUTH_PAYLOAD_STR)
+    username = auth_payload.get('username')
+    password = auth_payload.get('password')
+except:
+    username = None
+    password = None
+
+app.config["QUALYS_AUTH_URL"] = f"{QUALYS_BASE_URL}{AUTH_ENDPOINT}"
+app.config["QUALYS_USERNAME"] = username
+app.config["QUALYS_PASSWORD"] = password
+app.config["QUALYS_TIMEOUT_SECS"] = int(os.getenv('REQUEST_TIMEOUT', 60))
+
+# Initialize Extensions
+db.init_app(app)
+
 # Initialize Services
-# Note: In a real prod app with gunicorn multiple workers, 
-# global variables for singleton services might not work well for the SyncRunner (background thread).
-# But user requested "Flask + run instructions for flask run".
-# Since `flask run` is often single process development server or user implicitly accepts this constraint 
-# ("Sync must run in a background thread so UI remains responsive"), we use globals.
-# For production with multiple workers, we'd need an external task queue (Celery/Redis).
-# Given simplicity requirements ("Create a simple Flask app"), globals are acceptable.
+# Note: TokenManager is now functions using 'current_app' and 'db'
+# We need to wrap it or adapt CertViewClient to use it.
+# CertViewClient expects an object with .get_token().
+class TokenManagerAdapter:
+    def get_token(self, force_refresh=False):
+        # The new logic handles expiration internally in get_valid_token logic
+        # But force_refresh isn't explicitly exposed in get_valid_token 
+        # (it refreshes if invalid/missing).
+        # We can just call get_valid_token().
+        # If force_refresh is needed by Client logic (e.g. on 401),
+        # get_valid_token() might return a cached valid one.
+        # However, the user provided code:
+        # "If token expired or none exists: refresh... Ensures expired token is marked valid=False."
+        # It doesn't seemingly allow "Force Refresh even if DB says valid".
+        # But Client logic calls get_token(force_refresh=True) on 401.
+        # Modification: If force_refresh is True, we might want to manually 'refresh_token()'.
+        # But I should stick to the user's provided functions mainly.
+        # I'll import refresh_token too.
+        from services.token_manager import get_valid_token, refresh_token
+        if force_refresh:
+            return refresh_token()
+        return get_valid_token()
 
-token_mgr = TokenManager(
-    auth_url=f"{QUALYS_BASE_URL}{AUTH_ENDPOINT}",
-    auth_payload=AUTH_PAYLOAD
-)
+token_mgr = TokenManagerAdapter()
 
+# SyncStateManager uses its own sqlite connection for Certificates.
+# We might consider moving Certificates to SQLAlchemy too, but user didn't ask for that migration,
+# only the Auth logic. I'll keep SyncStateManager as is for now to minimize risk suitable for "Refactor Auth".
 state_mgr = SyncStateManager()
 
 client = CertViewClient(
     base_url=QUALYS_BASE_URL,
     list_endpoint=QUALYS_LIST_ENDPOINT,
     token_manager=token_mgr,
-    timeout=TIMEOUT
+    timeout=app.config["QUALYS_TIMEOUT_SECS"]
 )
 
-runner = SyncRunner(client, state_mgr, page_size=PAGE_SIZE)
+# Pass 'app' to SyncRunner so it can run with context
+runner = SyncRunner(client, state_mgr, app, page_size=int(os.getenv('PAGE_SIZE', 50)))
+
+with app.app_context():
+    db.create_all()
 
 @app.route('/')
 def index():
@@ -64,11 +106,6 @@ def get_status():
 
 @app.route('/api/data')
 def get_data():
-    # Return all data for the grid
-    # For large datasets, server-side pagination is better, 
-    # but user requirements say "Displays all aggregated results in an HTML table" 
-    # and implied client-side features via "AG Grid Community... Sort, Filter".
-    # We will return list of objects.
     certs = state_mgr.get_all_certificates()
     return jsonify(certs)
 
@@ -105,25 +142,18 @@ def export_excel():
         return jsonify({"message": "No data to export"}), 400
     
     df = pd.DataFrame(certs)
-    
-    # Reorder columns if needed or just dump all
-    # User said "Column order must match AG Grid columns"
-    # I'll try to enforce a logical order based on the normalize function
     columns = [
         'id', 'certhash', 'validFromDate', 'validToDate', 'issuer.name', 'subject.name',
         'keySize', 'serialNumber', 'signatureAlgorithm', 'extendedValidation', 'selfSigned',
         'issuer.organization', 'subject.organization', 'assetCount', 'instanceCount', 
         'sources', 'assets'
     ]
-    # Filter to existing columns only
     cols_to_use = [c for c in columns if c in df.columns]
     df = df[cols_to_use]
     
     output = io.BytesIO()
-    # using openpyxl engine
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Certificates')
-    
     output.seek(0)
     
     return send_file(
