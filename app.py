@@ -93,7 +93,7 @@ def export_excel():
     if not certs:
         return jsonify({"message": "No data to export"}), 400
     
-    df = pd.DataFrame(certs)
+    df = pd.json_normalize(certs)
     columns = [
         'id', 'certhash', 'validFromDate', 'validToDate', 'issuer.name', 'subject.name',
         'keySize', 'serialNumber', 'signatureAlgorithm', 'extendedValidation', 'selfSigned',

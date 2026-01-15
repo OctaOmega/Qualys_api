@@ -1,149 +1,177 @@
 import json
-import os
-import threading
 import logging
-import sqlite3
 from datetime import datetime
+from extensions import db
+from models import SyncState, Certificate
 
 logger = logging.getLogger(__name__)
 
 class SyncStateManager:
     """
     Manages persistence of the synchronization state and certificate data.
-    Uses SQLite for robust storage of certificates and metadata.
+    Uses SQLAlchemy for robust storage.
     """
-    def __init__(self, db_path='certificates.db'):
-        self.db_path = db_path
-        self._lock = threading.Lock()
-        self.init_db()
-
-    def init_db(self):
-        with self._lock:
-            conn = sqlite3.connect(self.db_path)
-            c = conn.cursor()
-            
-            # Table for Sync State
-            c.execute('''CREATE TABLE IF NOT EXISTS sync_state (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )''')
-            
-            # Table for Certificates
-            # Table for Certificates
-            c.execute('''CREATE TABLE IF NOT EXISTS certificates (
-                id TEXT PRIMARY KEY,
-                certhash TEXT,
-                validFromDate TEXT,
-                full_json TEXT
-            )''')
-            
-            conn.commit()
-            conn.close()
+    def __init__(self):
+        # db.create_all() is handled in app.py
+        pass
 
     def get_state(self):
         """
         Returns a dict with state:
-        last_successful_validFromDate
+        last_successful_valid_from_date
         last_sync_timestamp
         total_records_collected
         status
         """
-        with self._lock:
-            conn = sqlite3.connect(self.db_path)
-            c = conn.cursor()
-            state = {
+        try:
+            state = SyncState.query.get(1)
+            if not state:
+                return {
+                    'last_successful_validFromDate': '1900-01-01T00:00:00Z',
+                    'last_sync_timestamp': None,
+                    'total_records_collected': 0,
+                    'status': 'STOPPED'
+                }
+            
+            return {
+                'last_successful_validFromDate': state.last_successful_valid_from_date,
+                'last_sync_timestamp': state.last_sync_timestamp.isoformat() if state.last_sync_timestamp else None,
+                'total_records_collected': state.total_records_collected,
+                'status': state.status
+            }
+        except Exception as e:
+            logger.error(f"Error reading state: {e}")
+            return {
                 'last_successful_validFromDate': '1900-01-01T00:00:00Z',
                 'last_sync_timestamp': None,
                 'total_records_collected': 0,
                 'status': 'STOPPED'
             }
-            try:
-                c.execute("SELECT value FROM sync_state WHERE key='state'")
-                row = c.fetchone()
-                if row:
-                    saved_state = json.loads(row[0])
-                    state.update(saved_state)
-            except Exception as e:
-                logger.error(f"Error reading state: {e}")
-            finally:
-                conn.close()
-            return state
 
     def save_state(self, valid_from_date=None, total_records=None, status=None):
-        with self._lock:
-            conn = sqlite3.connect(self.db_path)
-            c = conn.cursor()
-            
-            # Read current first to update only changed fields
-            current_state = {}
-            c.execute("SELECT value FROM sync_state WHERE key='state'")
-            row = c.fetchone()
-            if row:
-                current_state = json.loads(row[0])
+        try:
+            state = SyncState.query.get(1)
+            if not state:
+                state = SyncState(id=1)
+                db.session.add(state)
             
             if valid_from_date:
-                current_state['last_successful_validFromDate'] = valid_from_date
+                state.last_successful_valid_from_date = valid_from_date
             if total_records is not None:
-                current_state['total_records_collected'] = total_records
+                state.total_records_collected = total_records
             if status:
-                current_state['status'] = status
+                state.status = status
             
-            current_state['last_sync_timestamp'] = datetime.now().isoformat()
-            
-            c.execute("INSERT OR REPLACE INTO sync_state (key, value) VALUES ('state', ?)", (json.dumps(current_state),))
-            conn.commit()
-            conn.close()
+            state.last_sync_timestamp = datetime.now()
+            db.session.commit()
+        except Exception as e:
+            logger.error(f"Error saving state: {e}")
+            db.session.rollback()
 
     def save_certificates(self, certs):
         """
         Batch insert/update certificates.
         certs: list of dicts (normalized certificate objects)
         """
-        with self._lock:
-            conn = sqlite3.connect(self.db_path)
-            c = conn.cursor()
-            try:
-                data = []
-                for cert in certs:
-                    # cert must have 'id'
-                    cert_id = str(cert.get('id', ''))
-                    certhash = cert.get('certhash', '')
-                    valid_from = cert.get('validFromDate', '')
-                    json_str = json.dumps(cert)
-                    data.append((cert_id, certhash, valid_from, json_str))
+        try:
+            for cert_data in certs:
+                cert_id = cert_data.get('id')
+                if not cert_id:
+                    continue
                 
-                c.executemany("INSERT OR REPLACE INTO certificates (id, certhash, validFromDate, full_json) VALUES (?, ?, ?, ?)", data)
-                conn.commit()
-            except Exception as e:
-                logger.error(f"Error saving certificates: {e}")
-                raise
-            finally:
-                conn.close()
+                # Check if exists
+                cert = Certificate.query.get(cert_id)
+                if not cert:
+                    cert = Certificate(id=cert_id)
+                    db.session.add(cert)
+                
+                # Update fields
+                cert.certhash = cert_data.get('certhash')
+                cert.key_size = cert_data.get('keySize')
+                cert.serial_number = cert_data.get('serialNumber')
+                cert.valid_to_date = cert_data.get('validToDate')
+                cert.valid_to = cert_data.get('validTo')
+                cert.valid_from_date = cert_data.get('validFromDate')
+                cert.valid_from = cert_data.get('validFrom')
+                cert.signature_algorithm = cert_data.get('signatureAlgorithm')
+                cert.extended_validation = cert_data.get('extendedValidation')
+                cert.created_date = cert_data.get('createdDate')
+                cert.dn = cert_data.get('dn')
+                cert.subject = cert_data.get('subject')
+                cert.update_date = cert_data.get('updateDate')
+                cert.last_found = cert_data.get('lastFound')
+                cert.imported = cert_data.get('imported')
+                cert.self_signed = cert_data.get('selfSigned')
+                cert.issuer = cert_data.get('issuer')
+                cert.root_issuer = cert_data.get('rootissuer')
+                cert.issuer_category = cert_data.get('issuerCategory')
+                cert.instance_count = cert_data.get('instanceCount')
+                cert.asset_count = cert_data.get('assetCount')
+                cert.sources = cert_data.get('sources')
+                cert.assets = cert_data.get('assets')
+                
+                # Default new fields if missing
+                # They already have defaults in model, but if we are updating we might want to preserve 
+                # or set if not present? Model default only applies on creation if not set.
+                # If these are coming from API, they likely won't have these fields, so we rely on DB defaults for new rows.
+                # If it's an update, we leave them alone unless passed.
+                if 'mapped_to_mip' in cert_data:
+                    cert.mapped_to_mip = cert_data['mapped_to_mip']
+                if 'mip_status' in cert_data:
+                    cert.mip_status = cert_data['mip_status']
+
+                cert.full_json = json.dumps(cert_data)
+            
+            db.session.commit()
+        except Exception as e:
+            logger.error(f"Error saving certificates: {e}")
+            db.session.rollback()
+            raise
 
     def get_all_certificates(self):
         """
         Retrieve all certificates for display/export.
         """
-        with self._lock:
-            conn = sqlite3.connect(self.db_path)
-            # Use a dict factory for better usage
-            conn.row_factory = sqlite3.Row
-            c = conn.cursor()
-            c.execute("SELECT full_json FROM certificates ORDER BY validFromDate DESC")
-            rows = c.fetchall()
-            conn.close()
+        try:
+            certs = Certificate.query.order_by(Certificate.valid_from_date.desc()).all()
+            # Return list of dicts to match previous interface
+            # The previous interface returned the JSON structure. 
+            # We can reconstruct it or return `full_json` loaded.
+            # Returning full_json loaded ensures we get exactly what was saved + our new fields if we injected them into full_json.
+            # HOWEVER, we want the new columns to be the source of truth for those fields.
+            # So let's base it on full_json, but update with our model fields if they differ (likely standard flow)
             
-            return [json.loads(r['full_json']) for r in rows]
+            results = []
+            for c in certs:
+                if c.full_json:
+                    data = json.loads(c.full_json)
+                else:
+                    data = {}
+                
+                # data['id'] = c.id
+                # Overlay our detailed fields just in case? 
+                # Actually, simply returning the loaded full_json is what the previous code did
+                # But wait, the user wants the new fields "Mapped to MIP" and "MIP Status" to be utilized.
+                # These fields are likely to be managed by the APP, not the Qualys Sync.
+                # So we should inject them into the returned dict.
+                
+                data['mapped_to_mip'] = c.mapped_to_mip
+                data['mip_status'] = c.mip_status
+                results.append(data)
+                
+            return results
+        except Exception as e:
+            logger.error(f"Error getting certificates: {e}")
+            return []
 
     def clear_data(self):
         """
         Clears all data and resets state.
         """
-        with self._lock:
-            conn = sqlite3.connect(self.db_path)
-            c = conn.cursor()
-            c.execute("DELETE FROM certificates")
-            c.execute("DELETE FROM certificates")
-            c.execute("DELETE FROM sync_state")
-            conn.commit()
-            conn.close()
+        try:
+            Certificate.query.delete()
+            SyncState.query.delete()
+            db.session.commit()
+        except Exception as e:
+            logger.error(f"Error clearing data: {e}")
+            db.session.rollback()

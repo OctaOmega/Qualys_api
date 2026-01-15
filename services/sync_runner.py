@@ -133,33 +133,12 @@ class SyncRunner:
                 self.state_manager.save_state(status="ERROR")
 
     def _normalize_cert(self, raw):
-        certhash = raw.get('certhash', raw.get('sha1', ''))
+        # We want to store the full raw response, but ensure 'id' works.
+        # Fallback for certhash/sha1 if needed.
+        if 'certhash' not in raw and 'sha1' in raw:
+            raw['certhash'] = raw['sha1']
         
-        sources = raw.get('sources', [])
-        if isinstance(sources, list):
-            sources_str = ",".join(str(s) for s in sources)
-        else:
-            sources_str = str(sources)
-
-        assets_list = raw.get('assets', [])
-        asset_names = ",".join(set(a.get('name', '') for a in assets_list))
+        # Ensure we don't return data without ID?
+        # The caller (save_certificates) checks for 'id'.
         
-        return {
-            'id': raw.get('id'),
-            'certhash': certhash,
-            'keySize': raw.get('keySize'),
-            'serialNumber': raw.get('serialNumber'),
-            'validFromDate': raw.get('validFromDate'),
-            'validToDate': raw.get('validToDate'),
-            'signatureAlgorithm': raw.get('signatureAlgorithm'),
-            'extendedValidation': raw.get('extendedValidation'),
-            'selfSigned': raw.get('selfSigned'),
-            'issuer.name': raw.get('issuer', {}).get('name'),
-            'issuer.organization': raw.get('issuer', {}).get('organization'),
-            'subject.name': raw.get('subject', {}).get('name'),
-            'subject.organization': raw.get('subject', {}).get('organization'),
-            'assetCount': raw.get('assetCount'),
-            'instanceCount': raw.get('instanceCount'),
-            'sources': sources_str,
-            'assets': asset_names
-        }
+        return raw
