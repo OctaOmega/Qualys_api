@@ -133,12 +133,7 @@ class SyncRunner:
                 self.state_manager.save_state(status="ERROR")
 
     def _normalize_cert(self, raw):
-        # We want to store the full raw response, but ensure 'id' works.
-        # Fallback for certhash/sha1 if needed.
         if 'certhash' not in raw and 'sha1' in raw:
             raw['certhash'] = raw['sha1']
-        
-        # Ensure we don't return data without ID?
-        # The caller (save_certificates) checks for 'id'.
-        
+            
         return raw

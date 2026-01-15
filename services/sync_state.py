@@ -110,11 +110,6 @@ class SyncStateManager:
                 cert.sources = cert_data.get('sources')
                 cert.assets = cert_data.get('assets')
                 
-                # Default new fields if missing
-                # They already have defaults in model, but if we are updating we might want to preserve 
-                # or set if not present? Model default only applies on creation if not set.
-                # If these are coming from API, they likely won't have these fields, so we rely on DB defaults for new rows.
-                # If it's an update, we leave them alone unless passed.
                 if 'mapped_to_mip' in cert_data:
                     cert.mapped_to_mip = cert_data['mapped_to_mip']
                 if 'mip_status' in cert_data:
@@ -134,27 +129,6 @@ class SyncStateManager:
         """
         try:
             certs = Certificate.query.order_by(Certificate.valid_from_date.desc()).all()
-            # Return list of dicts to match previous interface
-            # The previous interface returned the JSON structure. 
-            # We can reconstruct it or return `full_json` loaded.
-            # Returning full_json loaded ensures we get exactly what was saved + our new fields if we injected them into full_json.
-            # HOWEVER, we want the new columns to be the source of truth for those fields.
-            # So let's base it on full_json, but update with our model fields if they differ (likely standard flow)
-            
-            results = []
-            for c in certs:
-                if c.full_json:
-                    data = json.loads(c.full_json)
-                else:
-                    data = {}
-                
-                # data['id'] = c.id
-                # Overlay our detailed fields just in case? 
-                # Actually, simply returning the loaded full_json is what the previous code did
-                # But wait, the user wants the new fields "Mapped to MIP" and "MIP Status" to be utilized.
-                # These fields are likely to be managed by the APP, not the Qualys Sync.
-                # So we should inject them into the returned dict.
-                
                 data['mapped_to_mip'] = c.mapped_to_mip
                 data['mip_status'] = c.mip_status
                 results.append(data)

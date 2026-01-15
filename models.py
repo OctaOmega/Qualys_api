@@ -30,15 +30,7 @@ class Certificate(db.Model):
     key_size = db.Column(db.Integer)
     serial_number = db.Column(db.String(128))
     
-    # Dates can be tricky, storing as String or DateTime? 
-    # Plan said DateTime or String. Let's use String for ISO format to be safe with incoming data, 
-    # or DateTime if we parse it. The sample has "2023-02-13T00:00:00.000+00:00".
-    # Using String for simplicity in exact representation, or DateTime for queryability.
-    # Given the requirements "all fields from response", keeping them as they come (String) might be safer 
-    # BUT filtering is easier with DateTime.
-    # Let's use DateTime for the _date fields and BigInteger for the epoch fields.
-    
-    valid_to_date = db.Column(db.String(64)) # Keeping original string format is often safer for sync unless we need DB-side date math
+    valid_to_date = db.Column(db.String(64))
     valid_to = db.Column(db.BigInteger)
     valid_from_date = db.Column(db.String(64))
     valid_from = db.Column(db.BigInteger)
@@ -48,7 +40,7 @@ class Certificate(db.Model):
     created_date = db.Column(db.String(64))
     
     dn = db.Column(db.Text)
-    subject = db.Column(db.JSON) # SQLite supports JSON with SQLAlchemy > 1.3 or via extensions, but here db.JSON is generic
+    subject = db.Column(db.JSON)
     
     update_date = db.Column(db.String(64))
     last_found = db.Column(db.BigInteger)

@@ -36,14 +36,12 @@ def _parse_token_from_response(resp: requests.Response) -> str:
     return token
 
 def _invalidate_if_expired(token_row: QualysAuthToken) -> None:
-    # Use aware UTC now
     now = datetime.now(timezone.utc)
     
     expires_at = token_row.expires_at
     if expires_at is None:
         return
 
-    # Ensure expires_at is aware
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     
