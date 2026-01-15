@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,20 +10,33 @@
     <!-- AG Grid CSS -->
     <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.js"></script>
     <style>
-        body { padding-top: 20px; background-color: #f8f9fa; }
-        .grid-container { height: 600px; width: 100%; margin-top: 20px; }
-        .status-card { margin-bottom: 20px; }
+        body {
+            padding-top: 20px;
+            background-color: #f8f9fa;
+        }
+
+        .grid-container {
+            height: 600px;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .status-card {
+            margin-bottom: 20px;
+        }
     </style>
 </head>
+
 <body>
     <div class="container-fluid">
         <h2 class="mb-4">Qualys CertView Certificate Sync</h2>
-        
+
         <div class="card status-card">
             <div class="card-header">Sync Status</div>
             <div class="card-body">
                 <div class="row">
-                    <div class="col-md-3"><strong>Status:</strong> <span id="status-text" class="badge bg-secondary">Unknown</span></div>
+                    <div class="col-md-3"><strong>Status:</strong> <span id="status-text"
+                            class="badge bg-secondary">Unknown</span></div>
                     <div class="col-md-3"><strong>Records:</strong> <span id="total-records">0</span></div>
                     <div class="col-md-3"><strong>Last Valid From:</strong> <span id="last-date">-</span></div>
                     <div class="col-md-3"><strong>Updated:</strong> <span id="last-sync">-</span></div>
@@ -35,7 +49,8 @@
             <button class="btn btn-success me-2" onclick="resumeSync()">Sync Again (Resume)</button>
             <button class="btn btn-danger me-2" onclick="stopSync()">Stop Sync</button>
             <button class="btn btn-warning me-2" onclick="resetState()">Reset Sync State</button>
-            <a href="/api/export" class="btn btn-info" target="_blank">Export to Excel</a>
+            <a href="/api/export" class="btn btn-info me-2" target="_blank">Export to Excel</a>
+            <a href="/debug" class="btn btn-secondary" target="_blank">Debug View</a>
             <button class="btn btn-secondary ms-auto" onclick="refreshGrid()">Refresh Grid</button>
         </div>
 
@@ -69,7 +84,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             const gridDiv = document.querySelector('#myGrid');
             gridApi = agGrid.createGrid(gridDiv, gridOptions);
-            
+
             // Initial Data Load
             refreshGrid();
             // Start Polling
@@ -90,23 +105,23 @@
             try {
                 const response = await fetch('/api/status');
                 const state = await response.json();
-                
+
                 document.getElementById('status-text').innerText = state.status;
                 document.getElementById('total-records').innerText = state.total_records_collected;
                 document.getElementById('last-date').innerText = state.last_successful_validFromDate;
                 document.getElementById('last-sync').innerText = state.last_sync_timestamp || '-';
-                
+
                 // Colorize status
                 const badge = document.getElementById('status-text');
                 badge.className = 'badge ' + (
                     state.status === 'RUNNING' ? 'bg-primary' :
-                    state.status === 'COMPLETED' ? 'bg-success' :
-                    state.status === 'ERROR' ? 'bg-danger' : 'bg-secondary'
+                        state.status === 'COMPLETED' ? 'bg-success' :
+                            state.status === 'ERROR' ? 'bg-danger' : 'bg-secondary'
                 );
-                
+
                 // If running, maybe auto update grid periodically? 
                 // Or just let user click refresh. User requirements detailed polling for status.
-                
+
             } catch (error) {
                 console.error('Error polling status:', error);
             }
@@ -143,4 +158,5 @@
         }
     </script>
 </body>
+
 </html>
