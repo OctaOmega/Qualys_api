@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from flask import current_app
 from sqlalchemy.exc import SQLAlchemyError
 
-# Using absolute imports assuming running from root or modules setup
 from extensions import db
 from models import QualysAuthToken
 

@@ -67,6 +67,7 @@ class SyncRunner:
                 last_date_str = state.get('last_successful_validFromDate') or "1900-01-01T00:00:00Z"
                 
                 current_start_date = dateutil.parser.parse(last_date_str)
+                current_start_date = dateutil.parser.parse(last_date_str)
                 # Next start date logic
                 start_dt = current_start_date + timedelta(days=1)
                 today = datetime.now()

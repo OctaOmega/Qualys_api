@@ -10,8 +10,7 @@ logger = logging.getLogger(__name__)
 class SyncStateManager:
     """
     Manages persistence of the synchronization state and certificate data.
-    Uses SQLite for robust storage of certificates and a small JSON file (or SQLite table) for metadata.
-    Given robustness requirements, I will use SQLite for both.
+    Uses SQLite for robust storage of certificates and metadata.
     """
     def __init__(self, db_path='certificates.db'):
         self.db_path = db_path
@@ -30,9 +29,7 @@ class SyncStateManager:
             )''')
             
             # Table for Certificates
-            # Storing as JSON blob mostly, but extracting key fields for filtering/sorting if needed locally.
-            # User wants "Export to Excel", so storing fields is better.
-            # Fields: id, certhash, keySize, serialNumber, validFromDate, validToDate, ...
+            # Table for Certificates
             c.execute('''CREATE TABLE IF NOT EXISTS certificates (
                 id TEXT PRIMARY KEY,
                 certhash TEXT,
@@ -146,8 +143,7 @@ class SyncStateManager:
             conn = sqlite3.connect(self.db_path)
             c = conn.cursor()
             c.execute("DELETE FROM certificates")
-            # Reset state but keep 'status' as STOPPED probably? 
-            # Or just wipe it. User said "Start Full Sync -> clears state + cache"
+            c.execute("DELETE FROM certificates")
             c.execute("DELETE FROM sync_state")
             conn.commit()
             conn.close()

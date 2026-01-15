@@ -8,7 +8,6 @@ import json
 
 from extensions import db
 from models import QualysAuthToken
-# token_manager is now a module with functions, need to adapt client usage
 from services.token_manager import get_valid_token 
 from services.sync_state import SyncStateManager
 from services.certview_client import CertViewClient
@@ -52,24 +51,8 @@ app.config["QUALYS_TIMEOUT_SECS"] = int(os.getenv('REQUEST_TIMEOUT', 60))
 db.init_app(app)
 
 # Initialize Services
-# Note: TokenManager is now functions using 'current_app' and 'db'
-# We need to wrap it or adapt CertViewClient to use it.
-# CertViewClient expects an object with .get_token().
 class TokenManagerAdapter:
     def get_token(self, force_refresh=False):
-        # The new logic handles expiration internally in get_valid_token logic
-        # But force_refresh isn't explicitly exposed in get_valid_token 
-        # (it refreshes if invalid/missing).
-        # We can just call get_valid_token().
-        # If force_refresh is needed by Client logic (e.g. on 401),
-        # get_valid_token() might return a cached valid one.
-        # However, the user provided code:
-        # "If token expired or none exists: refresh... Ensures expired token is marked valid=False."
-        # It doesn't seemingly allow "Force Refresh even if DB says valid".
-        # But Client logic calls get_token(force_refresh=True) on 401.
-        # Modification: If force_refresh is True, we might want to manually 'refresh_token()'.
-        # But I should stick to the user's provided functions mainly.
-        # I'll import refresh_token too.
         from services.token_manager import get_valid_token, refresh_token
         if force_refresh:
             return refresh_token()
@@ -77,9 +60,8 @@ class TokenManagerAdapter:
 
 token_mgr = TokenManagerAdapter()
 
-# SyncStateManager uses its own sqlite connection for Certificates.
-# We might consider moving Certificates to SQLAlchemy too, but user didn't ask for that migration,
-# only the Auth logic. I'll keep SyncStateManager as is for now to minimize risk suitable for "Refactor Auth".
+token_mgr = TokenManagerAdapter()
+
 state_mgr = SyncStateManager()
 
 client = CertViewClient(

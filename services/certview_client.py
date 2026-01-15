@@ -25,7 +25,6 @@ class CertViewClient:
         """
         url = f"{self.base_url}{self.list_endpoint}"
         
-        # User specified Post Body:
         payload = {
             "filter": {
                 "filters": [
@@ -47,10 +46,7 @@ class CertViewClient:
             attempts += 1
             token = self.token_manager.get_token(force_refresh=(attempts > 1))
             headers = {
-                "Authorization": f"Bearer {token}", # Assuming Bearer, user said "internal auth token", usually Bearer or just raw header.
-                # If it's a proprietary Qualys header, I would need that info. 
-                # Assuming standard Authorization header for now. 
-                # Wait, "X-Requested-With" is common in Qualys.
+                "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
                 "X-Requested-With": "PyQualysApp"
             }
