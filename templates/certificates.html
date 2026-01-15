@@ -69,10 +69,87 @@
         </div>
 
         <div id="myGrid" class="grid-container ag-theme-quartz"></div>
+
+        <!-- Confirmation Modal -->
+        <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Confirm Action</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body" id="confirmMessage">
+                        Are you sure?
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="confirmBtn">Confirm</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Modal -->
+        <div class="modal fade" id="infoModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Information</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body" id="infoMessage">
+                        ...
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Action</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="confirmMessage">
+                    Are you sure?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmBtn">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Modal -->
+    <div class="modal fade" id="infoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Information</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="infoMessage">
+                    ...
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
         let gridApi;
+        let confirmModalVal;
+        let infoModalVal;
+        let confirmCallback = null;
 
         // Grid Options
         const gridOptions = {
@@ -94,16 +171,37 @@
             paginationPageSize: 100
         };
 
-        // Initialize Grid
+        // Initialize Grid & Modals
         document.addEventListener('DOMContentLoaded', () => {
             const gridDiv = document.querySelector('#myGrid');
             gridApi = agGrid.createGrid(gridDiv, gridOptions);
+
+            confirmModalVal = new bootstrap.Modal(document.getElementById('confirmModal'));
+            infoModalVal = new bootstrap.Modal(document.getElementById('infoModal'));
+
+            document.getElementById('confirmBtn').addEventListener('click', () => {
+                if (confirmCallback) {
+                    confirmCallback();
+                    confirmModalVal.hide();
+                }
+            });
 
             // Initial Data Load
             refreshGrid();
             // Start Polling
             setInterval(pollStatus, 3000);
         });
+
+        function showConfirm(message, onConfirm) {
+            document.getElementById('confirmMessage').innerText = message;
+            confirmCallback = onConfirm;
+            confirmModalVal.show();
+        }
+
+        function showInfo(message) {
+            document.getElementById('infoMessage').innerText = message;
+            infoModalVal.show();
+        }
 
         async function refreshGrid() {
             try {
@@ -141,21 +239,21 @@
             }
         }
 
-        async function startSync(interval = 'full') {
-            if (!confirm(`Start ${interval.charAt(0).toUpperCase() + interval.slice(1)} Sync? This will clear existing data.`)) return;
-
-            try {
-                const res = await fetch('/api/start_sync', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ interval: interval })
-                });
-                const json = await res.json();
-                alert(json.message);
-            } catch (err) {
-                alert("Action failed");
-            }
-            refreshGrid();
+        function startSync(interval = 'full') {
+            showConfirm(`Start ${interval.charAt(0).toUpperCase() + interval.slice(1)} Sync? This will clear existing data.`, async () => {
+                try {
+                    const res = await fetch('/api/start_sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ interval: interval })
+                    });
+                    const json = await res.json();
+                    showInfo(json.message);
+                } catch (err) {
+                    showInfo("Action failed");
+                }
+                refreshGrid();
+            });
         }
 
         async function resumeSync(interval = 'full') {
@@ -166,9 +264,9 @@
                     body: JSON.stringify({ interval: interval })
                 });
                 const json = await res.json();
-                alert(json.message);
+                showInfo(json.message);
             } catch (err) {
-                alert("Action failed");
+                showInfo("Action failed");
             }
         }
 
@@ -176,19 +274,20 @@
             await postAction('/api/stop_sync');
         }
 
-        async function resetState() {
-            if (!confirm("Reset State? This deletes all data.")) return;
-            await postAction('/api/reset_state');
-            refreshGrid();
+        function resetState() {
+            showConfirm("Reset State? This deletes all data.", async () => {
+                await postAction('/api/reset_state');
+                refreshGrid();
+            });
         }
 
         async function postAction(url) {
             try {
                 const res = await fetch(url, { method: 'POST' });
                 const json = await res.json();
-                alert(json.message);
+                showInfo(json.message);
             } catch (err) {
-                alert("Action failed");
+                showInfo("Action failed");
             }
         }
     </script>
