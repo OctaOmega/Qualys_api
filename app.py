@@ -125,5 +125,14 @@ def debug_view():
     
     return render_template('debug_tables.html', sync_state=sync_state, tokens=tokens)
 
+@app.route('/api/refresh_token', methods=['POST'])
+def force_refresh_token():
+    try:
+        token = token_mgr.get_token(force_refresh=True)
+        return jsonify({"message": "Token Refreshed", "token": token[:20] + "..."}), 200
+    except Exception as e:
+        logger.error(f"Error refreshing token: {e}")
+        return jsonify({"message": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True)

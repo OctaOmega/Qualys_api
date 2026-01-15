@@ -1,7 +1,7 @@
 import threading
 import time
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import dateutil.parser
 
 logger = logging.getLogger(__name__)
@@ -70,7 +70,7 @@ class SyncRunner:
                 current_start_date = dateutil.parser.parse(last_date_str)
                 # Next start date logic
                 start_dt = current_start_date + timedelta(days=1)
-                today = datetime.now()
+                today = datetime.now(timezone.utc)
                 
                 current_year = start_dt.year
                 target_year = today.year
@@ -79,9 +79,9 @@ class SyncRunner:
                     if current_year == start_dt.year:
                         year_start = start_dt
                     else:
-                        year_start = datetime(current_year, 1, 1)
+                        year_start = datetime(current_year, 1, 1, tzinfo=timezone.utc)
                     
-                    year_end = datetime(current_year, 12, 31, 23, 59, 59)
+                    year_end = datetime(current_year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
                     if year_end > today:
                         year_end = today
                     
