@@ -115,5 +115,15 @@ def export_excel():
         download_name='certificates_export.xlsx'
     )
 
+@app.route('/debug')
+def debug_view():
+    # Fetch Sync State
+    sync_state = state_mgr.get_state()
+    
+    # Fetch Tokens
+    tokens = QualysAuthToken.query.order_by(QualysAuthToken.id.desc()).all()
+    
+    return render_template('debug_tables.html', sync_state=sync_state, tokens=tokens)
+
 if __name__ == '__main__':
     app.run(debug=True)
