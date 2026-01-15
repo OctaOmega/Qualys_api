@@ -1,11 +1,9 @@
-import os
 import logging
 from flask import Flask, render_template, jsonify, request, send_file
-from dotenv import load_dotenv
 import pandas as pd
 import io
-import json
 
+from config import Config
 from extensions import db
 from models import QualysAuthToken
 from services.token_manager import get_valid_token 
@@ -13,39 +11,13 @@ from services.sync_state import SyncStateManager
 from services.certview_client import CertViewClient
 from services.sync_runner import SyncRunner
 
-# Load Env
-load_dotenv()
-
 # Logging Setup
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('app')
 
 app = Flask(__name__)
-
-# Config
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Mapping Env to Config expected by TokenManager
-QUALYS_BASE_URL = os.getenv('QUALYS_BASE_URL', 'https://gateway.qg1.apps.qualys.com')
-QUALYS_LIST_ENDPOINT = os.getenv('QUALYS_CERTVIEW_LIST_ENDPOINT', '/certview/v2/certificates/list')
-AUTH_ENDPOINT = os.getenv('QUALYS_INTERNAL_AUTH_ENDPOINT', '/auth/token')
-AUTH_PAYLOAD_STR = os.getenv('QUALYS_INTERNAL_AUTH_PAYLOAD', '{"username": "", "password": ""}')
-
-# Parse payload to get user/pass for config
-try:
-    auth_payload = json.loads(AUTH_PAYLOAD_STR)
-    username = auth_payload.get('username')
-    password = auth_payload.get('password')
-except:
-    username = None
-    password = None
-
-app.config["QUALYS_AUTH_URL"] = f"{QUALYS_BASE_URL}{AUTH_ENDPOINT}"
-app.config["QUALYS_USERNAME"] = username
-app.config["QUALYS_PASSWORD"] = password
-app.config["QUALYS_TIMEOUT_SECS"] = int(os.getenv('REQUEST_TIMEOUT', 60))
+app.config.from_object(Config)
 
 # Initialize Extensions
 db.init_app(app)
@@ -60,19 +32,17 @@ class TokenManagerAdapter:
 
 token_mgr = TokenManagerAdapter()
 
-token_mgr = TokenManagerAdapter()
-
 state_mgr = SyncStateManager()
 
 client = CertViewClient(
-    base_url=QUALYS_BASE_URL,
-    list_endpoint=QUALYS_LIST_ENDPOINT,
+    base_url=app.config['QUALYS_BASE_URL'],
+    list_endpoint=app.config['QUALYS_LIST_ENDPOINT'],
     token_manager=token_mgr,
     timeout=app.config["QUALYS_TIMEOUT_SECS"]
 )
 
 # Pass 'app' to SyncRunner so it can run with context
-runner = SyncRunner(client, state_mgr, app, page_size=int(os.getenv('PAGE_SIZE', 50)))
+runner = SyncRunner(client, state_mgr, app, page_size=app.config['PAGE_SIZE'])
 
 with app.app_context():
     db.create_all()
