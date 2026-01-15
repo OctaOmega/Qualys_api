@@ -63,16 +63,18 @@ def get_data():
 
 @app.route('/api/start_sync', methods=['POST'])
 def start_sync():
-    success = runner.start_full_sync()
+    interval = request.json.get('interval', 'full') if request.is_json else 'full'
+    success = runner.start_full_sync(interval=interval)
     if success:
-        return jsonify({"message": "Full Sync Started"}), 200
+        return jsonify({"message": f"{interval.capitalize()} Sync Started"}), 200
     return jsonify({"message": "Sync already running"}), 400
 
 @app.route('/api/resume_sync', methods=['POST'])
 def resume_sync():
-    success = runner.resume_sync()
+    interval = request.json.get('interval', 'full') if request.is_json else 'full'
+    success = runner.resume_sync(interval=interval)
     if success:
-        return jsonify({"message": "Sync Resumed"}), 200
+        return jsonify({"message": f"Sync Resumed ({interval})"}), 200
     return jsonify({"message": "Sync already running"}), 400
 
 @app.route('/api/stop_sync', methods=['POST'])

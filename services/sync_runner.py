@@ -15,7 +15,7 @@ class SyncRunner:
         self._stop_event = threading.Event()
         self._thread = None
 
-    def start_full_sync(self):
+    def start_full_sync(self, interval='full'):
         """Starts a fresh sync from 1900-01-01."""
         if self.is_running():
             logger.warning("Sync already running.")
@@ -31,11 +31,11 @@ class SyncRunner:
             status="RUNNING"
         )
         
-        self._thread = threading.Thread(target=self._run_sync_loop)
+        self._thread = threading.Thread(target=self._run_sync_loop, args=(interval,))
         self._thread.start()
         return True
 
-    def resume_sync(self):
+    def resume_sync(self, interval='full'):
         """Resumes sync from last successful date."""
         if self.is_running():
             logger.warning("Sync already running.")
@@ -44,7 +44,7 @@ class SyncRunner:
         self._stop_event.clear()
         self.state_manager.save_state(status="RUNNING")
         
-        self._thread = threading.Thread(target=self._run_sync_loop)
+        self._thread = threading.Thread(target=self._run_sync_loop, args=(interval,))
         self._thread.start()
         return True
 
@@ -58,35 +58,54 @@ class SyncRunner:
     def is_running(self):
         return self._thread is not None and self._thread.is_alive()
 
-    def _run_sync_loop(self):
+    def _run_sync_loop(self, interval):
         # IMPORTANT: Run inside app context for DB access
         with self.app.app_context():
             try:
-                logger.info("Starting Sync Loop")
+                logger.info(f"Starting Sync Loop - Interval: {interval}")
                 state = self.state_manager.get_state()
                 last_date_str = state.get('last_successful_validFromDate') or "1900-01-01T00:00:00Z"
                 
-                current_start_date = dateutil.parser.parse(last_date_str)
                 current_start_date = dateutil.parser.parse(last_date_str)
                 # Next start date logic
                 start_dt = current_start_date + timedelta(days=1)
                 today = datetime.now(timezone.utc)
                 
-                current_year = start_dt.year
-                target_year = today.year
+                current_process_date = start_dt
                 
-                while current_year <= target_year and not self._stop_event.is_set():
-                    if current_year == start_dt.year:
-                        year_start = start_dt
-                    else:
-                        year_start = datetime(current_year, 1, 1, tzinfo=timezone.utc)
+                while current_process_date <= today and not self._stop_event.is_set():
                     
-                    year_end = datetime(current_year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
-                    if year_end > today:
-                        year_end = today
+                    year = current_process_date.year
+                    month = current_process_date.month
+                    day = current_process_date.day
                     
-                    start_str = year_start.strftime("%Y-%m-%dT%H:%M:%SZ")
-                    end_str = year_end.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    chunk_start = current_process_date
+                    
+                    # Calculate chunk end based on interval
+                    if interval == 'daily':
+                        chunk_end = datetime(year, month, day, 23, 59, 59, tzinfo=timezone.utc)
+                        next_process_date = chunk_start + timedelta(days=1)
+                        
+                    elif interval == 'monthly':
+                        # Last day of current month
+                        if month == 12:
+                            next_month = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+                        else:
+                            next_month = datetime(year, month + 1, 1, tzinfo=timezone.utc)
+                        
+                        chunk_end = next_month - timedelta(seconds=1) 
+                        next_process_date = next_month
+
+                    else: # 'full' / yearly default
+                        chunk_end = datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+                        next_process_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+
+                    # Cap at today
+                    if chunk_end > today:
+                        chunk_end = today
+
+                    start_str = chunk_start.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    end_str = chunk_end.strftime("%Y-%m-%dT%H:%M:%SZ")
                     
                     logger.info(f"Syncing range: {start_str} to {end_str}")
                     
@@ -97,7 +116,7 @@ class SyncRunner:
                             data = self.client.fetch_certificates(start_str, end_str, page_number, self.page_size)
                             
                             if not data:
-                                logger.info("No data returned, moving to next year/chunk.")
+                                logger.info("No data returned, moving to next chunk.")
                                 break
                             
                             count_returned = len(data)
@@ -123,7 +142,8 @@ class SyncRunner:
                             self.state_manager.save_state(status="ERROR")
                             return
 
-                    current_year += 1
+                    # Advance loop
+                    current_process_date = next_process_date
                 
                 if not self._stop_event.is_set():
                     self.state_manager.save_state(status="COMPLETED")
