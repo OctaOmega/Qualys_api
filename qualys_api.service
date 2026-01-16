@@ -1,0 +1,23 @@
+[Unit]
+Description=Gunicorn instance to serve Qualys API
+After=network.target
+
+[Service]
+# User/Group to run the service
+User=ubuntu
+Group=www-data
+
+# Path to the application directory
+# CHANGE THIS to your actual application path
+WorkingDirectory=/home/ubuntu/qualys_api
+
+# Environment variables
+Environment="PATH=/home/ubuntu/qualys_api/venv/bin"
+# EnvironmentFile=/home/ubuntu/qualys_api/.env
+
+# Command to start Gunicorn
+# Ensure gunicorn is installed in your virtual environment
+ExecStart=/home/ubuntu/qualys_api/venv/bin/gunicorn --config gunicorn_config.py app:app
+
+[Install]
+WantedBy=multi-user.target
