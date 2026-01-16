@@ -1,264 +1,184 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends 'base.html' %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Qualys CertView Sync</title>
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- AG Grid CSS -->
-    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <style>
-        body {
-            padding-top: 20px;
-            background-color: #f8f9fa;
-        }
+{% block content %}
+<h2 class="mb-4">Qualys CertView Certificate Sync</h2>
 
-        .grid-container {
-            height: 600px;
-            width: 100%;
-            margin-top: 20px;
-        }
-
-        .status-card {
-            margin-bottom: 20px;
-        }
-    </style>
-</head>
-
-<body>
-    <div class="container-fluid">
-        <h2 class="mb-4">Qualys CertView Certificate Sync</h2>
-
-        <div class="card status-card">
-            <div class="card-header">Sync Status</div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3"><strong>Status:</strong> <span id="status-text"
-                            class="badge bg-secondary">Unknown</span></div>
-                    <div class="col-md-3"><strong>Records:</strong> <span id="total-records">0</span></div>
-                    <div class="col-md-3"><strong>Last Valid From:</strong> <span id="last-date">-</span></div>
-                    <div class="col-md-3"><strong>Updated:</strong> <span id="last-sync">-</span></div>
-                </div>
-            </div>
+<div class="card status-card">
+    <div class="card-header">Sync Status</div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3"><strong>Status:</strong> <span id="status-text"
+                    class="badge bg-secondary">Unknown</span></div>
+            <div class="col-md-3"><strong>Records:</strong> <span id="total-records">0</span></div>
+            <div class="col-md-3"><strong>Last Valid From:</strong> <span id="last-date">-</span></div>
+            <div class="col-md-3"><strong>Updated:</strong> <span id="last-sync">-</span></div>
         </div>
+    </div>
+</div>
 
-        <div class="mb-3">
-            <button class="btn btn-primary me-2" onclick="startSync('full')">Start Full Sync</button>
-            <button class="btn btn-outline-primary me-2" onclick="startSync('monthly')">Start Monthly Sync</button>
-            <button class="btn btn-outline-primary me-2" onclick="startSync('daily')">Start Daily Sync</button>
-            <div class="btn-group me-2">
-                <button type="button" class="btn btn-success" onclick="resumeSync('full')">Resume Sync</button>
-                <button type="button" class="btn btn-success dropdown-toggle dropdown-toggle-split"
-                    data-bs-toggle="dropdown" aria-expanded="false">
-                    <span class="visually-hidden">Toggle Dropdown</span>
-                </button>
-                <ul class="dropdown-menu">
-                    <li><a class="dropdown-item" href="#" onclick="resumeSync('full')">Resume (Yearly)</a></li>
-                    <li><a class="dropdown-item" href="#" onclick="resumeSync('monthly')">Resume (Monthly)</a></li>
-                    <li><a class="dropdown-item" href="#" onclick="resumeSync('daily')">Resume (Daily)</a></li>
-                </ul>
+<div class="mb-3">
+    <button class="btn btn-primary me-2" onclick="startSync('full')">Start Full Sync</button>
+    <button class="btn btn-outline-primary me-2" onclick="startSync('monthly')">Start Monthly Sync</button>
+    <button class="btn btn-outline-primary me-2" onclick="startSync('daily')">Start Daily Sync</button>
+    <div class="btn-group me-2">
+        <button type="button" class="btn btn-success" onclick="resumeSync('full')">Resume Sync</button>
+        <button type="button" class="btn btn-success dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown"
+            aria-expanded="false">
+            <span class="visually-hidden">Toggle Dropdown</span>
+        </button>
+        <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="#" onclick="resumeSync('full')">Resume (Yearly)</a></li>
+            <li><a class="dropdown-item" href="#" onclick="resumeSync('monthly')">Resume (Monthly)</a></li>
+            <li><a class="dropdown-item" href="#" onclick="resumeSync('daily')">Resume (Daily)</a></li>
+        </ul>
+    </div>
+    <button class="btn btn-danger me-2" onclick="stopSync()">Stop Sync</button>
+    <button class="btn btn-warning me-2" onclick="resetState()">Reset Sync State</button>
+    <a href="/api/export" class="btn btn-info me-2" target="_blank">Export to Excel</a>
+    <a href="/inventory_mapping" class="btn btn-dark me-2">Inventory Mapping</a>
+    <a href="/debug" class="btn btn-secondary" target="_blank">Debug View</a>
+    <button class="btn btn-secondary ms-auto" onclick="refreshGrid()">Refresh Grid</button>
+</div>
+
+<div id="myGrid" class="grid-container ag-theme-quartz"></div>
+
+<!-- Confirmation Modal -->
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Action</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <button class="btn btn-danger me-2" onclick="stopSync()">Stop Sync</button>
-            <button class="btn btn-warning me-2" onclick="resetState()">Reset Sync State</button>
-            <a href="/api/export" class="btn btn-info me-2" target="_blank">Export to Excel</a>
-            <a href="/debug" class="btn btn-secondary" target="_blank">Debug View</a>
-            <button class="btn btn-secondary ms-auto" onclick="refreshGrid()">Refresh Grid</button>
-        </div>
-
-        <div id="myGrid" class="grid-container ag-theme-quartz"></div>
-
-        <!-- Confirmation Modal -->
-        <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Confirm Action</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body" id="confirmMessage">
-                        Are you sure?
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="button" class="btn btn-primary" id="confirmBtn">Confirm</button>
-                    </div>
-                </div>
+            <div class="modal-body" id="confirmMessage">
+                Are you sure?
             </div>
-        </div>
-
-        <!-- Info Modal -->
-        <div class="modal fade" id="infoModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Information</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body" id="infoMessage">
-                        ...
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    </div>
-                </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmBtn">Confirm</button>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- Confirmation Modal -->
-    <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Confirm Action</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body" id="confirmMessage">
-                    Are you sure?
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="confirmBtn">Confirm</button>
-                </div>
+<!-- Info Modal -->
+<div class="modal fade" id="infoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Information</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="infoMessage">
+                ...
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- Info Modal -->
-    <div class="modal fade" id="infoModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Information</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body" id="infoMessage">
-                    ...
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
+<script>
+    let gridApi;
+    let confirmModalVal;
+    let infoModalVal;
+    let confirmCallback = null;
 
-    <script>
-        let gridApi;
-        let confirmModalVal;
-        let infoModalVal;
-        let confirmCallback = null;
+    // Grid Options
+    const gridOptions = {
+        rowData: [],
+        columnDefs: [
+            { field: "id", hide: true },
+            { field: "validFromDate", headerName: "Valid From", sortable: true, filter: true, width: 200, sort: 'desc' },
+            { field: "validToDate", headerName: "Valid To", sortable: true, filter: true, width: 200 },
+            { field: "issuer.name", headerName: "Issuer Name", sortable: true, filter: true, width: 250 },
+            { field: "subject.name", headerName: "Subject Name", sortable: true, filter: true, width: 250 },
+            { field: "certhash", headerName: "Hash", sortable: true, filter: true },
+            { field: "keySize", headerName: "Key Size", sortable: true, filter: true, width: 100 },
+            { field: "serialNumber", headerName: "Serial", sortable: true, filter: true },
+            { field: "signatureAlgorithm", headerName: "Sig Alg", sortable: true, filter: true },
+            { field: "assetCount", headerName: "Assets", sortable: true, filter: true, width: 100 },
+            { field: "sources", headerName: "Sources", sortable: true, filter: true },
+            { field: "mapped_to_mip", headerName: "In MIP", sortable: true, filter: true, width: 100 },
+            { field: "mip_status", headerName: "MIP Status", sortable: true, filter: true, width: 150 }
+        ],
+        pagination: true,
+        paginationPageSize: 100
+    };
 
-        // Grid Options
-        const gridOptions = {
-            rowData: [],
-            columnDefs: [
-                { field: "id", hide: true },
-                { field: "validFromDate", headerName: "Valid From", sortable: true, filter: true, width: 200, sort: 'desc' },
-                { field: "validToDate", headerName: "Valid To", sortable: true, filter: true, width: 200 },
-                { field: "issuer.name", headerName: "Issuer Name", sortable: true, filter: true, width: 250 },
-                { field: "subject.name", headerName: "Subject Name", sortable: true, filter: true, width: 250 },
-                { field: "certhash", headerName: "Hash", sortable: true, filter: true },
-                { field: "keySize", headerName: "Key Size", sortable: true, filter: true, width: 100 },
-                { field: "serialNumber", headerName: "Serial", sortable: true, filter: true },
-                { field: "signatureAlgorithm", headerName: "Sig Alg", sortable: true, filter: true },
-                { field: "assetCount", headerName: "Assets", sortable: true, filter: true, width: 100 },
-                { field: "sources", headerName: "Sources", sortable: true, filter: true }
-            ],
-            pagination: true,
-            paginationPageSize: 100
-        };
+    // Initialize Grid & Modals
+    document.addEventListener('DOMContentLoaded', () => {
+        const gridDiv = document.querySelector('#myGrid');
+        gridApi = agGrid.createGrid(gridDiv, gridOptions);
 
-        // Initialize Grid & Modals
-        document.addEventListener('DOMContentLoaded', () => {
-            const gridDiv = document.querySelector('#myGrid');
-            gridApi = agGrid.createGrid(gridDiv, gridOptions);
+        confirmModalVal = new bootstrap.Modal(document.getElementById('confirmModal'));
+        infoModalVal = new bootstrap.Modal(document.getElementById('infoModal'));
 
-            confirmModalVal = new bootstrap.Modal(document.getElementById('confirmModal'));
-            infoModalVal = new bootstrap.Modal(document.getElementById('infoModal'));
-
-            document.getElementById('confirmBtn').addEventListener('click', () => {
-                if (confirmCallback) {
-                    confirmCallback();
-                    confirmModalVal.hide();
-                }
-            });
-
-            // Initial Data Load
-            refreshGrid();
-            // Start Polling
-            setInterval(pollStatus, 3000);
+        document.getElementById('confirmBtn').addEventListener('click', () => {
+            if (confirmCallback) {
+                confirmCallback();
+                confirmModalVal.hide();
+            }
         });
 
-        function showConfirm(message, onConfirm) {
-            document.getElementById('confirmMessage').innerText = message;
-            confirmCallback = onConfirm;
-            confirmModalVal.show();
-        }
+        // Initial Data Load
+        refreshGrid();
+        // Start Polling
+        setInterval(pollStatus, 3000);
+    });
 
-        function showInfo(message) {
-            document.getElementById('infoMessage').innerText = message;
-            infoModalVal.show();
-        }
+    function showConfirm(message, onConfirm) {
+        document.getElementById('confirmMessage').innerText = message;
+        confirmCallback = onConfirm;
+        confirmModalVal.show();
+    }
 
-        async function refreshGrid() {
+    function showInfo(message) {
+        document.getElementById('infoMessage').innerText = message;
+        infoModalVal.show();
+    }
+
+    async function refreshGrid() {
+        try {
+            const response = await fetch('/api/data');
+            const data = await response.json();
+            gridApi.setGridOption('rowData', data);
+        } catch (error) {
+            console.error('Error fetching data:', error);
+        }
+    }
+
+    async function pollStatus() {
+        try {
+            const response = await fetch('/api/status');
+            const state = await response.json();
+
+            document.getElementById('status-text').innerText = state.status;
+            document.getElementById('total-records').innerText = state.total_records_collected;
+            document.getElementById('last-date').innerText = state.last_successful_validFromDate;
+            document.getElementById('last-sync').innerText = state.last_sync_timestamp || '-';
+
+            // Colorize status
+            const badge = document.getElementById('status-text');
+            badge.className = 'badge ' + (
+                state.status === 'RUNNING' ? 'bg-primary' :
+                    state.status === 'COMPLETED' ? 'bg-success' :
+                        state.status === 'ERROR' ? 'bg-danger' : 'bg-secondary'
+            );
+
+            // If running, maybe auto update grid periodically? 
+            // Or just let user click refresh. User requirements detailed polling for status.
+
+        } catch (error) {
+            console.error('Error polling status:', error);
+        }
+    }
+
+    function startSync(interval = 'full') {
+        showConfirm(`Start ${interval.charAt(0).toUpperCase() + interval.slice(1)} Sync? This will clear existing data.`, async () => {
             try {
-                const response = await fetch('/api/data');
-                const data = await response.json();
-                gridApi.setGridOption('rowData', data);
-            } catch (error) {
-                console.error('Error fetching data:', error);
-            }
-        }
-
-        async function pollStatus() {
-            try {
-                const response = await fetch('/api/status');
-                const state = await response.json();
-
-                document.getElementById('status-text').innerText = state.status;
-                document.getElementById('total-records').innerText = state.total_records_collected;
-                document.getElementById('last-date').innerText = state.last_successful_validFromDate;
-                document.getElementById('last-sync').innerText = state.last_sync_timestamp || '-';
-
-                // Colorize status
-                const badge = document.getElementById('status-text');
-                badge.className = 'badge ' + (
-                    state.status === 'RUNNING' ? 'bg-primary' :
-                        state.status === 'COMPLETED' ? 'bg-success' :
-                            state.status === 'ERROR' ? 'bg-danger' : 'bg-secondary'
-                );
-
-                // If running, maybe auto update grid periodically? 
-                // Or just let user click refresh. User requirements detailed polling for status.
-
-            } catch (error) {
-                console.error('Error polling status:', error);
-            }
-        }
-
-        function startSync(interval = 'full') {
-            showConfirm(`Start ${interval.charAt(0).toUpperCase() + interval.slice(1)} Sync? This will clear existing data.`, async () => {
-                try {
-                    const res = await fetch('/api/start_sync', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ interval: interval })
-                    });
-                    const json = await res.json();
-                    showInfo(json.message);
-                } catch (err) {
-                    showInfo("Action failed");
-                }
-                refreshGrid();
-            });
-        }
-
-        async function resumeSync(interval = 'full') {
-            try {
-                const res = await fetch('/api/resume_sync', {
+                const res = await fetch('/api/start_sync', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ interval: interval })
@@ -268,29 +188,43 @@
             } catch (err) {
                 showInfo("Action failed");
             }
-        }
+            refreshGrid();
+        });
+    }
 
-        async function stopSync() {
-            await postAction('/api/stop_sync');
-        }
-
-        function resetState() {
-            showConfirm("Reset State? This deletes all data.", async () => {
-                await postAction('/api/reset_state');
-                refreshGrid();
+    async function resumeSync(interval = 'full') {
+        try {
+            const res = await fetch('/api/resume_sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ interval: interval })
             });
+            const json = await res.json();
+            showInfo(json.message);
+        } catch (err) {
+            showInfo("Action failed");
         }
+    }
 
-        async function postAction(url) {
-            try {
-                const res = await fetch(url, { method: 'POST' });
-                const json = await res.json();
-                showInfo(json.message);
-            } catch (err) {
-                showInfo("Action failed");
-            }
+    async function stopSync() {
+        await postAction('/api/stop_sync');
+    }
+
+    function resetState() {
+        showConfirm("Reset State? This deletes all data.", async () => {
+            await postAction('/api/reset_state');
+            refreshGrid();
+        });
+    }
+
+    async function postAction(url) {
+        try {
+            const res = await fetch(url, { method: 'POST' });
+            const json = await res.json();
+            showInfo(json.message);
+        } catch (err) {
+            showInfo("Action failed");
         }
-    </script>
-</body>
-
-</html>
+    }
+</script>
+{% endblock %}

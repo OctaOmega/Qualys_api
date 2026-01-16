@@ -61,3 +61,12 @@ class Certificate(db.Model):
     mip_status = db.Column(db.String(64), default='Unknown')
 
     full_json = db.Column(db.Text)
+
+class InventoryMapping(db.Model):
+    __tablename__ = 'inventory_mapping'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    serial_number = db.Column(db.String(128), index=True)
+    certificate_name = db.Column(db.String(255))
+    certificate_status = db.Column(db.String(64))
+    processed = db.Column(db.Boolean, default=False)

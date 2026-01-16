@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>Inventory Mapping Import</h2>
+        <p>Upload an Excel file containing the following columns: <strong>Certificate Serial Number</strong>, <strong>Certificate Name</strong>, <strong>Certificate Status</strong>.</p>
+        
+        <div class="card mb-4">
+            <div class="card-body">
+                <form id="uploadForm">
+                    <div class="mb-3">
+                        <label for="fileInput" class="form-label">Select Excel File</label>
+                        <input class="form-control" type="file" id="fileInput" accept=".xlsx, .xls">
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="uploadBtn">Upload & Start Mapping</button>
+                </form>
+                <div id="uploadStatus" class="mt-3"></div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                Mapping Service Status
+            </div>
+            <div class="card-body">
+                 <h5 id="serviceStatus">Unknown</h5>
+                 <button class="btn btn-sm btn-secondary" onclick="checkStatus()">Refresh Status</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const fileInput = document.getElementById('fileInput');
+    const statusDiv = document.getElementById('uploadStatus');
+    const btn = document.getElementById('uploadBtn');
+    
+    if (!fileInput.files[0]) {
+        statusDiv.innerHTML = '<div class="alert alert-warning">Please select a file.</div>';
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    
+    btn.disabled = true;
+    statusDiv.innerHTML = '<div class="alert alert-info">Uploading...</div>';
+    
+    try {
+        const response = await fetch('/api/inventory/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            statusDiv.innerHTML = `<div class="alert alert-success">${result.message}</div>`;
+            checkStatus(); // Refresh status immediately
+        } else {
+            statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${result.message}</div>`;
+        }
+    } catch (error) {
+        statusDiv.innerHTML = `<div class="alert alert-danger">Network Error: ${error}</div>`;
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+async function checkStatus() {
+    try {
+        const response = await fetch('/api/inventory/status');
+        const data = await response.json();
+        const statusEl = document.getElementById('serviceStatus');
+        
+        if (data.is_running) {
+            statusEl.innerHTML = '<span class="badge bg-success">Running...</span>';
+            // simple poll
+            setTimeout(checkStatus, 2000); 
+        } else {
+            statusEl.innerHTML = '<span class="badge bg-secondary">Idle</span>';
+        }
+    } catch (e) {
+        console.error("Status check failed", e);
+    }
+}
+
+// Initial check
+checkStatus();
+</script>
+{% endblock %}

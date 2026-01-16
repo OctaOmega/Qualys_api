@@ -41,6 +41,15 @@ client = CertViewClient(
     timeout=app.config["QUALYS_TIMEOUT_SECS"]
 )
 
+from services.inventory_mapping import InventoryMappingService
+
+# ... existing imports ...
+
+# Initialize Services
+# ... existing initialization ...
+
+inv_service = InventoryMappingService(app)
+
 # Pass 'app' to SyncRunner so it can run with context
 runner = SyncRunner(client, state_mgr, app, page_size=app.config['PAGE_SIZE'])
 
@@ -51,10 +60,38 @@ with app.app_context():
 def index():
     return render_template('certificates.html')
 
+@app.route('/inventory_mapping')
+def inventory_view():
+    return render_template('inventory_mapping.html')
+
+@app.route('/api/inventory/upload', methods=['POST'])
+def upload_inventory():
+    if 'file' not in request.files:
+        return jsonify({"message": "No file part"}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"message": "No selected file"}), 400
+    
+    if file:
+        success, msg = inv_service.save_mapping_data(file)
+        if success:
+            # Start background mapping
+            start_success, start_msg = inv_service.start_mapping_process()
+            return jsonify({"message": f"{msg} {start_msg}"}), 200
+        else:
+            return jsonify({"message": msg}), 400
+
+@app.route('/api/inventory/status')
+def inventory_status():
+    return jsonify(inv_service.get_status())
+
 @app.route('/api/status')
 def get_status():
     state = state_mgr.get_state()
     return jsonify(state)
+
+# ... rest of existing routes ...
+
 
 @app.route('/api/data')
 def get_data():

@@ -129,6 +129,15 @@ class SyncStateManager:
         """
         try:
             certs = Certificate.query.order_by(Certificate.valid_from_date.desc()).all()
+            results = []
+            for c in certs:
+                if c.full_json:
+                    data = json.loads(c.full_json)
+                else:
+                    data = {} # Should have full_json always, but handle gracefully
+                    
+                # Ensure local fields are merged/overwrite if needed
+                data['id'] = c.id
                 data['mapped_to_mip'] = c.mapped_to_mip
                 data['mip_status'] = c.mip_status
                 results.append(data)
